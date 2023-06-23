@@ -1,0 +1,61 @@
+service: upload
+plugins:
+  - serverless-dotenv-plugin
+  - serverless-offline
+custom:
+  serverless-offline:
+    httpPort: 4441
+  prefix: ${self:provider.stage}-${self:service}
+  bucket: cdn2.example.com
+provider:
+  name: aws
+  runtime: nodejs12.x
+  region: eu-west-1
+  stackName: upload
+  apiGateway:
+    binaryMediaTypes:
+      - '*/*'
+  iamRoleStatements:
+    - Effect: 'Allow'
+      Action:
+        - 's3:PutObject'
+        - 's3:GetObject'
+      Resource:
+        - 'arn:aws:s3:::${self:custom.bucket}/*'
+resources:
+  Resources:
+    GatewayResponseDefault4XX:
+      Type: 'AWS::ApiGateway::GatewayResponse'
+      Properties:
+        ResponseParameters:
+          gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+          gatewayresponse.header.Access-Control-Allow-Headers: "'*'"
+        ResponseType: DEFAULT_4XX
+        RestApiId:
+          Ref: 'ApiGatewayRestApi'
+functions:
+  User_Authorizer:
+    handler: auth.user
+  Upload_MediaUpload:
+    handler: mediaUpload.handler
+    events:
+      - http:
+          path: media/upload
+          method: post
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+            allowCredentials: false
+          authorizer:
+            name: User_Authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+    environment:
+      Bucket: ${self:custom.bucket}
